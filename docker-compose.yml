@@ -1,177 +1,4 @@
 services:
-  # PostgreSQL Database (Supabase)
-  postgres:
-    image: supabase/postgres:15.1.0.117
-    container_name: tetraedro-postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB:-tetraedro}
-      POSTGRES_USER: postgres
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d
-    networks:
-      - tetraedro-network
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    deploy:
-      resources:
-        limits:
-          cpus: '4'
-          memory: 8G
-        reservations:
-          cpus: '2'
-          memory: 4G
-
-  # PostgREST - Auto REST API
-  postgrest:
-    image: postgrest/postgrest:v11.2.2
-    container_name: tetraedro-postgrest
-    restart: unless-stopped
-    ports:
-      - "3001:3000"
-    environment:
-      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tetraedro}
-      PGRST_DB_SCHEMAS: public
-      PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${JWT_SECRET}
-      PGRST_DB_USE_LEGACY_GUCS: "false"
-      PGRST_APP_SETTINGS_JWT_SECRET: ${JWT_SECRET}
-      PGRST_APP_SETTINGS_JWT_EXP: 3600
-      PGRST_DB_POOL: 20
-      PGRST_DB_POOL_TIMEOUT: 10
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - tetraedro-network
-
-  # GoTrue - Authentication
-  gotrue:
-    image: supabase/gotrue:v2.99.0
-    container_name: tetraedro-gotrue
-    restart: unless-stopped
-    ports:
-      - "9999:9999"
-    environment:
-      GOTRUE_API_HOST: 0.0.0.0
-      GOTRUE_API_PORT: 9999
-      API_EXTERNAL_URL: ${API_EXTERNAL_URL:-http://localhost:8000}
-      GOTRUE_DB_DRIVER: postgres
-      GOTRUE_DB_DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tetraedro}?search_path=auth
-      GOTRUE_SITE_URL: ${SITE_URL:-http://localhost:3000}
-      GOTRUE_URI_ALLOW_LIST: ${ADDITIONAL_REDIRECT_URLS}
-      GOTRUE_DISABLE_SIGNUP: ${DISABLE_SIGNUP:-false}
-      GOTRUE_JWT_ADMIN_ROLES: admin
-      GOTRUE_JWT_AUD: authenticated
-      GOTRUE_JWT_DEFAULT_GROUP_NAME: authenticated
-      GOTRUE_JWT_EXP: 3600
-      GOTRUE_JWT_SECRET: ${JWT_SECRET}
-      GOTRUE_EXTERNAL_EMAIL_ENABLED: true
-      GOTRUE_MAILER_AUTOCONFIRM: ${MAILER_AUTOCONFIRM:-false}
-      GOTRUE_SMTP_ADMIN_EMAIL: ${SMTP_ADMIN_EMAIL}
-      GOTRUE_SMTP_HOST: ${SMTP_HOST}
-      GOTRUE_SMTP_PORT: ${SMTP_PORT}
-      GOTRUE_SMTP_USER: ${SMTP_USER}
-      GOTRUE_SMTP_PASS: ${SMTP_PASS}
-      GOTRUE_SMTP_SENDER_NAME: ${SMTP_SENDER_NAME:-TETRAEDRO}
-      GOTRUE_MAILER_URLPATHS_INVITE: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_CONFIRMATION: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_RECOVERY: /auth/v1/verify
-      GOTRUE_MAILER_URLPATHS_EMAIL_CHANGE: /auth/v1/verify
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - tetraedro-network
-
-  # Realtime - WebSocket Server
-  realtime:
-    image: supabase/realtime:v2.25.35
-    container_name: tetraedro-realtime
-    restart: unless-stopped
-    ports:
-      - "4000:4000"
-    environment:
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: postgres
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_NAME: ${POSTGRES_DB:-tetraedro}
-      DB_SSL: "false"
-      PORT: 4000
-      JWT_SECRET: ${JWT_SECRET}
-      REPLICATION_MODE: RLS
-      REPLICATION_POLL_INTERVAL: 100
-      SECURE_CHANNELS: "true"
-      SLOT_NAME: supabase_realtime_rls
-      TEMPORARY_SLOT: "true"
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - tetraedro-network
-
-  # Storage API - File Storage
-  storage:
-    image: supabase/storage-api:v0.43.11
-    container_name: tetraedro-storage
-    restart: unless-stopped
-    ports:
-      - "5000:5000"
-    environment:
-      ANON_KEY: ${ANON_KEY}
-      SERVICE_KEY: ${SERVICE_ROLE_KEY}
-      POSTGREST_URL: http://postgrest:3000
-      PGRST_JWT_SECRET: ${JWT_SECRET}
-      DATABASE_URL: postgres://postgres:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-tetraedro}
-      FILE_SIZE_LIMIT: 52428800
-      STORAGE_BACKEND: file
-      FILE_STORAGE_BACKEND_PATH: /var/lib/storage
-      TENANT_ID: stub
-      REGION: stub
-      GLOBAL_S3_BUCKET: stub
-      ENABLE_IMAGE_TRANSFORMATION: "false"
-    volumes:
-      - storage_data:/var/lib/storage
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - tetraedro-network
-
-  # Kong - API Gateway
-  kong:
-    image: kong:3.4
-    container_name: tetraedro-kong
-    restart: unless-stopped
-    ports:
-      - "8000:8000"
-      - "8443:8443"
-      - "8001:8001"
-    environment:
-      KONG_DATABASE: "off"
-      KONG_DECLARATIVE_CONFIG: /usr/local/kong/kong.yml
-      KONG_DNS_ORDER: LAST,A,CNAME
-      KONG_PLUGINS: request-transformer,cors,key-auth,rate-limiting
-      KONG_NGINX_PROXY_PROXY_BUFFER_SIZE: 160k
-      KONG_NGINX_PROXY_PROXY_BUFFERS: 64 160k
-    volumes:
-      - ./kong.yml:/usr/local/kong/kong.yml:ro
-    depends_on:
-      - postgrest
-      - gotrue
-      - realtime
-      - storage
-    networks:
-      - tetraedro-network
-
   # Redis - Cache
   redis:
     image: redis:7-alpine
@@ -195,7 +22,7 @@ services:
     build:
       context: .
       args:
-        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL:-http://localhost:8000}
+        - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
         - VITE_SUPABASE_ANON_KEY=${ANON_KEY}
     image: ${DOCKER_REGISTRY:-ghcr.io}/${GITHUB_REPOSITORY:-tetraedro}/frontend:${IMAGE_TAG:-latest}
     container_name: tetraedro-frontend
@@ -203,10 +30,8 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:80"
     environment:
-      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:-http://localhost:8000}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
       VITE_SUPABASE_ANON_KEY: ${ANON_KEY}
-    depends_on:
-      - kong
     networks:
       - tetraedro-network
 
@@ -215,9 +40,5 @@ networks:
     driver: bridge
 
 volumes:
-  postgres_data:
-    driver: local
-  storage_data:
-    driver: local
   redis_data:
     driver: local
