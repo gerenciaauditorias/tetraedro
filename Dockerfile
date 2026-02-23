@@ -3,45 +3,47 @@
 # ============================================
 FROM node:20-alpine AS builder
 
+# Set working directory
 WORKDIR /app
 
-# Copiar archivos de dependencias
+# Copy dependency files first to leverage Docker cache
 COPY package.json package-lock.json ./
 
-# Instalar TODAS las dependencias (incluyendo devDependencies para el build)
-RUN npm ci
+# Install dependencies (only what's needed for build)
+RUN npm ci --quiet
 
-# Copiar código fuente
+# Copy source code
 COPY . .
 
-# Definir argumentos de construcción
+# Build arguments
 ARG VITE_SUPABASE_URL
 ARG VITE_SUPABASE_ANON_KEY
 
-# Establecer variables de entorno para el build
-ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
-ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
-
-# Build de la aplicación
-RUN npm run build
+# Build application
+RUN VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY \
+    npm run build
 
 # ============================================
 # Stage 2: Production
 # ============================================
-FROM nginx:alpine
+FROM nginx:stable-alpine-slim
 
-# Copiar build desde stage anterior
-COPY --from=builder /app/dist /usr/share/nginx/html
-
-# Copiar configuración de nginx
+# Copy Nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Exponer puerto
+# Copy build output from stage 1
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Set permissions for Nginx
+RUN touch /var/run/nginx.pid && \
+    chown -R nginx:nginx /var/run/nginx.pid /usr/share/nginx/html /var/cache/nginx /var/log/nginx /etc/nginx/conf.d
+
+USER nginx
+
 EXPOSE 80
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --quiet --tries=1 --spider http://localhost/ || exit 1
 
-# Comando de inicio
 CMD ["nginx", "-g", "daemon off;"]
