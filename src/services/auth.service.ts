@@ -31,7 +31,6 @@ class AuthService {
         try {
             // Workaround: GoTrue bypass via RPC.
             // Se usa `any` porque el cliente Supabase no infiere Args correctamente para RPC custom.
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: rpcData, error } = await (supabase as any).rpc('login', {
                 email,
                 password,

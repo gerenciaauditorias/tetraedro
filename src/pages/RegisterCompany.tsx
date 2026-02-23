@@ -44,7 +44,6 @@ export const RegisterCompany = () => {
     const onSubmit = async (data: RegisterFormData) => {
         setLoading(true);
         try {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const { data: response, error } = await (supabase as any).rpc('register_tenant', {
                 email: data.email,
                 password: data.password,
