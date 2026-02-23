@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # PostgreSQL Metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres:5432']
+    
+  # PostgREST Metrics
+  - job_name: 'postgrest'
+    static_configs:
+      - targets: ['postgrest:3000']
+    
+  # Kong Metrics
+  - job_name: 'kong'
+    static_configs:
+      - targets: ['kong:8001']
+    
+  # Redis Metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis:6379']
+    
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
